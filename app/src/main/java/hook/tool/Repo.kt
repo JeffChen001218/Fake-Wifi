@@ -1,15 +1,14 @@
 package hook.tool
 
-import android.app.Application
 import android.content.ContentValues
 import android.content.Context
+import hook.tool.ReflectContextHelper.getContext
 import hook.tool.SharedContentContract.CONTENT_URI
 import hook.tool.SharedContentContract.TextEntry.COLUMN_KEY
 import hook.tool.SharedContentContract.TextEntry.COLUMN_VALUE
 import hook.tool.SharedContentContract.TextEntry.allColumns
 
-
-fun saveValue(key: String, value: String, context: Context? = getApp()) {
+fun saveValue(key: String, value: String, context: Context? = getContext()) {
     context ?: return
     val values = ContentValues().apply {
         put(COLUMN_VALUE, value)
@@ -33,7 +32,7 @@ fun saveValue(key: String, value: String, context: Context? = getApp()) {
     }
 }
 
-fun getValue(key: String, context: Context? = getApp()): String {
+fun getValue(key: String, context: Context? = getContext()): String {
     context ?: return ""
     val cursor = context.contentResolver.query(
         CONTENT_URI,
@@ -48,17 +47,4 @@ fun getValue(key: String, context: Context? = getApp()): String {
         }
         return@use null
     } ?: ""
-}
-
-fun getApp(): Application? {
-    return try {
-        val activityThreadClass = Class.forName("android.app.ActivityThread")
-        val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
-        val activityThread = currentActivityThreadMethod.invoke(null)
-        val getApplicationMethod = activityThreadClass.getMethod("getApplication")
-        getApplicationMethod.invoke(activityThread) as? Application
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
 }

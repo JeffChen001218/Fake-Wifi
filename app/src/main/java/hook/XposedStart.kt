@@ -1,6 +1,5 @@
 package hook
 
-import android.app.Application
 import android.content.Context
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -26,8 +25,6 @@ class XposedStart : IXposedHookLoadPackage {
             "android.content.ContextWrapper", loadPackageParam.classLoader, "attachBaseContext",
             Context::class.java, object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    val context = (param.thisObject as? Application) ?: return
-
                     XposedHelpers.findAndHookMethod(
                         "android.net.wifi.WifiInfo",
                         loadPackageParam.classLoader,
@@ -45,9 +42,10 @@ class XposedStart : IXposedHookLoadPackage {
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
                                 // modify return value
-                                param?.result = getValue("ssid", context)
+                                param?.result = getValue("ssid")
                             }
                         })
+
                     XposedHelpers.findAndHookMethod(
                         "android.net.wifi.WifiInfo",
                         loadPackageParam.classLoader,
@@ -56,9 +54,10 @@ class XposedStart : IXposedHookLoadPackage {
                             @Throws(Throwable::class)
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
-                                param?.result = getValue("bssid", context)
+                                param?.result = getValue("bssid")
                             }
                         })
+
                     XposedHelpers.findAndHookMethod(
                         "android.net.wifi.WifiInfo",
                         loadPackageParam.classLoader,
@@ -67,9 +66,10 @@ class XposedStart : IXposedHookLoadPackage {
                             @Throws(Throwable::class)
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
-                                param?.result = getValue("mac", context)
+                                param?.result = getValue("mac")
                             }
                         })
+
                 }
             })
     }
