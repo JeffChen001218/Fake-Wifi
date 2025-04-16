@@ -5,6 +5,7 @@ import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
+import de.robv.android.xposed.XposedHelpers.findClass
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
 import hook.tool.getValue
 
@@ -17,14 +18,28 @@ class XposedStart : IXposedHookLoadPackage {
         XposedBridge.log("hook started")
 
         // 获取需要的class (如果所hook的函数参数需要)
-        // val wifiInfoCLz = XposedHelpers.findClass("android.net.wifi.WifiInfo", loadPackageParam.classLoader)
+//         val wifiInfoCLz = XposedHelpers.findClass("android.net.wifi.WifiInfo", loadPackageParam.classLoader)
 
-        // val context = AndroidAppHelper.currentApplication() // 可能取不到，跟时机有关系
+        // Helper获取Context（可能取不到，跟时机有关系）
+//         val context = AndroidAppHelper.currentApplication()
 
-        XposedHelpers.findAndHookMethod(
-            "android.content.ContextWrapper", loadPackageParam.classLoader, "attachBaseContext",
-            Context::class.java, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+        // 可以获取Context，但是使用ContentProvider似乎会报错：Given calling package android does not match caller's uid
+//        val context = callMethod(
+//            callStaticMethod(
+//                findClass("android.app.ActivityThread", loadPackageParam.classLoader),
+//                "currentActivityThread"
+//            ), "getSystemContext"
+//        ) as Context
+
+        // hook获取Content
+        XposedBridge.hookAllMethods(
+            findClass("android.app.Instrumentation", loadPackageParam.classLoader),
+            "newApplication", object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam?) {
+                    super.afterHookedMethod(param)
+                    val context = param?.result as Context
+
+
                     XposedHelpers.findAndHookMethod(
                         "android.net.wifi.WifiInfo",
                         loadPackageParam.classLoader,
@@ -42,7 +57,7 @@ class XposedStart : IXposedHookLoadPackage {
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
                                 // modify return value
-                                param?.result = getValue("ssid")
+                                param?.result = getValue("ssid", context)
                             }
                         })
 
@@ -54,7 +69,7 @@ class XposedStart : IXposedHookLoadPackage {
                             @Throws(Throwable::class)
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
-                                param?.result = getValue("bssid")
+                                param?.result = getValue("bssid", context)
                             }
                         })
 
@@ -66,12 +81,12 @@ class XposedStart : IXposedHookLoadPackage {
                             @Throws(Throwable::class)
                             override fun afterHookedMethod(param: MethodHookParam?) {
                                 super.afterHookedMethod(param)
-                                param?.result = getValue("mac")
+                                param?.result = getValue("mac", context)
                             }
                         })
 
                 }
-            })
+            });
     }
 }
 
