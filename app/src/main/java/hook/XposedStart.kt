@@ -1,13 +1,22 @@
 package hook
 
+import android.app.Application
 import android.content.Context
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.compose.ui.platform.ComposeView
+import androidx.core.view.children
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.XposedHelpers.findClass
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
+import hook.tool.INJECT_UI_TAG
+import hook.tool.TopActivityProvider
 import hook.tool.getValue
+import hook.tool.injectUI
+import hook.ui.ShakeDetector
 
 class XposedStart : IXposedHookLoadPackage {
     @Throws(Throwable::class)
@@ -35,10 +44,33 @@ class XposedStart : IXposedHookLoadPackage {
         XposedBridge.hookAllMethods(
             findClass("android.app.Instrumentation", loadPackageParam.classLoader),
             "newApplication", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam?) {
+                override fun afterHookedMethod(param: MethodHookParam) {
                     super.afterHookedMethod(param)
-                    val context = param?.result as Context
+                    val context = param.result as Context
 
+                    TopActivityProvider.init(context.applicationContext as Application)
+                    ShakeDetector(context) {
+                        val activity = TopActivityProvider.get() ?: return@ShakeDetector
+                        val decorView = activity.window.decorView as ViewGroup
+
+                        if (decorView.children.any { it.tag == INJECT_UI_TAG }) {
+                            return@ShakeDetector
+                        }
+
+                        val composeView = ComposeView(activity).apply parent@{
+                            val parent = this
+                            tag = INJECT_UI_TAG
+                            layoutParams = FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                            )
+                            setContent {
+                                injectUI(parent)
+                            }
+                        }
+
+                        decorView.addView(composeView)
+                    }.start()
 
                     XposedHelpers.findAndHookMethod(
                         "android.net.wifi.WifiInfo",
