@@ -1,114 +1,103 @@
 package hook.tool
 
+import android.app.Activity
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.RoundRectShape
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import com.hook.fakewifi.R
-import com.hook.fakewifi.ui.theme.primaryColor
+import androidx.core.view.children
+import androidx.core.widget.doOnTextChanged
 
-const val INJECT_UI_TAG = "fake_wifi_config"
+private const val UI_TAG = "inject_ui"
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun injectUI(parent: ViewGroup) {
-    Dialog(
-        onDismissRequest = { (parent.parent as? ViewGroup)?.removeView(parent) }
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White)
-        ) {
-            TopAppBar(title = { Text("Fake WIFI") })
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Item("SSID", "ssid")
-                    Item("BSSID", "bssid")
-                    Item("MAC", "mac")
-                }
+fun injectUI(activity: Activity) {
+    val context = activity
+    val parent = (activity.window.decorView as? ViewGroup) ?: return
+
+    if (parent.children.any { it.tag == UI_TAG }) {
+        return
+    }
+
+    val container = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+    }
+
+    val titleView = TextView(context).apply {
+        text = "Fake WIFI"
+        textSize = 20f
+        setTypeface(null, Typeface.BOLD)
+        setPadding(0, 0, 0, 16)
+    }
+    container.addView(titleView)
+
+    fun createItem(title: String, key: String): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = 24
+            }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        var savedValue = getValue(key, context)
+        var editingText = savedValue
+
+        val saveButton = Button(context).apply {
+            isAllCaps = false
+            text = "Save"
+            setBtnEnable(savedValue != editingText)
+        }
+
+        val editText = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            setText(getValue(key, context))
+            doOnTextChanged { charSequence, _, _, _ ->
+                editingText = text.toString().trim()
+                saveButton.setBtnEnable(savedValue != editingText)
+            }
+            hint = title
+        }
+
+        saveButton.setOnClickListener {
+            val current = editText.text.toString().trim()
+            if (current != savedValue.trim()) {
+                savedValue = current
+                saveValue(key, current, context)
+                saveButton.setBtnEnable(savedValue != editingText)
+                Toast.makeText(context, "$title Saved", Toast.LENGTH_SHORT).show()
             }
         }
+
+        row.addView(editText)
+        row.addView(saveButton)
+
+        return row
     }
+
+    container.addView(createItem("SSID", "ssid"))
+    container.addView(createItem("BSSID", "bssid"))
+    container.addView(createItem("MAC", "mac"))
+
+    parent.addView(DialogView(activity, container).apply {
+        tag = UI_TAG
+    })
 }
 
-
-@Composable
-private fun Item(title: String, saveKey: String) {
-    val context = LocalContext.current
-
-    var editingValue by remember { mutableStateOf(getValue(saveKey, context)) }
-    var savedValue by remember { mutableStateOf(getValue(saveKey, context)) }
-
-    val changed by remember {
-        derivedStateOf {
-            savedValue.trim() != editingValue.trim()
-        }
-    }
-
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        TextField(
-            editingValue.trim(),
-            label = { Text(title) },
-            onValueChange = { editingValue = it.trim() },
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(Modifier.width(16.dp))
-        Image(
-            painterResource(R.drawable.save), null,
-            contentScale = ContentScale.Inside,
-            colorFilter = ColorFilter.tint(if (changed) primaryColor else primaryColor.copy(0.5f)),
-            modifier = Modifier
-                .size(48.dp)
-                .shadow(12.dp, RoundedCornerShape(8.dp), clip = false)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.White)
-                .clickable {
-                    if (changed) {
-                        savedValue = editingValue.trim()
-                        saveValue(saveKey, editingValue.trim(), context)
-                        Toast.makeText(context, "${title} Saved", Toast.LENGTH_SHORT).show()
-                    }
-                }
-        )
-    }
+private fun Button.setBtnEnable(enable: Boolean) {
+    isEnabled = enable
+    setTextColor(if (enable) Color.parseColor("#333333") else Color.parseColor("#999999"))
+    setBackground(ShapeDrawable(RoundRectShape(FloatArray(8) { 1080.toPx() }, null, null)).apply {
+        setTint(if (enable) Color.parseColor("#53C4EF") else Color.parseColor("#0F333333"))
+    })
 }

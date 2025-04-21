@@ -3,16 +3,11 @@ package hook
 import android.app.Application
 import android.content.Context
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import androidx.compose.ui.platform.ComposeView
-import androidx.core.view.children
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.XposedHelpers.findClass
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam
-import hook.tool.INJECT_UI_TAG
 import hook.tool.TopActivityProvider
 import hook.tool.getValue
 import hook.tool.injectUI
@@ -41,35 +36,41 @@ class XposedStart : IXposedHookLoadPackage {
 //        ) as Context
 
         // hook获取Content
-        XposedBridge.hookAllMethods(
-            findClass("android.app.Instrumentation", loadPackageParam.classLoader),
-            "newApplication", object : XC_MethodHook() {
+        XposedHelpers.findAndHookMethod(
+            "android.content.ContextWrapper",
+            loadPackageParam.classLoader,
+            "attachBaseContext",
+            Context::class.java,
+            object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     super.afterHookedMethod(param)
-                    val context = param.result as Context
-
-                    TopActivityProvider.init(context.applicationContext as Application)
+                    val context = param.args[0] as Context
+                    XposedBridge.log(
+                        "context info => " +
+                                "\n\tpackageName: ${context.packageName}" +
+                                "\n\tapplicationContext: ${context.applicationContext}"
+                    )
+                    val application = context.applicationContext as? Application ?: run {
+                        XposedBridge.log("applicationContext is null. return")
+                        return
+                    }
+                    TopActivityProvider.init(application)
+                    if (context.applicationInfo.processName != context.packageName) {
+                        XposedBridge.log("not main process. return")
+                        return
+                    }
                     ShakeDetector(context) {
-                        val activity = TopActivityProvider.get() ?: return@ShakeDetector
-                        val decorView = activity.window.decorView as ViewGroup
-
-                        if (decorView.children.any { it.tag == INJECT_UI_TAG }) {
+                        XposedBridge.log("shake detected")
+                        val activity = TopActivityProvider.get()
+                        if (activity == null) {
+                            XposedBridge.log("no activity found. return")
                             return@ShakeDetector
                         }
-
-                        val composeView = ComposeView(activity).apply parent@{
-                            val parent = this
-                            tag = INJECT_UI_TAG
-                            layoutParams = FrameLayout.LayoutParams(
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                                FrameLayout.LayoutParams.MATCH_PARENT,
-                            )
-                            setContent {
-                                injectUI(parent)
-                            }
+                        activity.runOnUiThread {
+                            XposedBridge.log("==== start inject UI ====")
+                            injectUI(activity)
+                            XposedBridge.log("==== complete inject UI ====")
                         }
-
-                        decorView.addView(composeView)
                     }.start()
 
                     XposedHelpers.findAndHookMethod(
